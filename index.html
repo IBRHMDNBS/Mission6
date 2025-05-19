@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Öğrenci Yönetimi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body>
+<div class="container mt-5">
+    <h2 class="mb-4">Öğrenci Yönetimi</h2>
+    <button id="btnAddStudent" class="btn btn-primary mb-3">Yeni Öğrenci Ekle</button>
+    <div id="alertPlaceholder"></div>
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>ID</th>
+                <th>Ad</th>
+                <th>Soyad</th>
+                <th>Öğrenci No</th>
+                <th>Sınıf</th>
+                <th>İşlemler</th>
+            </tr>
+        </thead>
+        <tbody id="studentsTableBody"></tbody>
+    </table>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="studentModal" tabindex="-1" aria-labelledby="studentModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form id="studentForm" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="studentModalLabel">Yeni Öğrenci Ekle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <div id="modalAlertPlaceholder"></div>
+        <input type="hidden" id="studentId" />
+        <div class="mb-3">
+            <label for="firstName" class="form-label">Ad</label>
+            <input type="text" class="form-control" id="firstName" required />
+        </div>
+        <div class="mb-3">
+            <label for="lastName" class="form-label">Soyad</label>
+            <input type="text" class="form-control" id="lastName" required />
+        </div>
+        <div class="mb-3">
+            <label for="studentNumber" class="form-label">Öğrenci Numarası</label>
+            <input type="text" class="form-control" id="studentNumber" required pattern="\d+" title="Sadece rakam giriniz." />
+        </div>
+        <div class="mb-3">
+            <label for="studentClass" class="form-label">Sınıf</label>
+            <input type="text" class="form-control" id="studentClass" required />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+        <button type="submit" class="btn btn-primary" id="saveStudentBtn">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const apiUrl = `https://localhost:7102/api/Students`;
+
+  const studentsTableBody = document.getElementById('studentsTableBody');
+  const alertPlaceholder = document.getElementById('alertPlaceholder');
+
+  const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
+  const studentForm = document.getElementById('studentForm');
+  const modalAlertPlaceholder = document.getElementById('modalAlertPlaceholder');
+
+  const studentModalLabel = document.getElementById('studentModalLabel');
+  const saveStudentBtn = document.getElementById('saveStudentBtn');
+  const studentIdInput = document.getElementById('studentId');
+  const firstNameInput = document.getElementById('firstName');
+  const lastNameInput = document.getElementById('lastName');
+  const studentNumberInput = document.getElementById('studentNumber');
+  const studentClassInput = document.getElementById('studentClass');
+
+  document.getElementById('btnAddStudent').addEventListener('click', () => {
+    clearModal();
+    studentModalLabel.textContent = 'Yeni Öğrenci Ekle';
+    saveStudentBtn.textContent = 'Ekle';
+    studentModal.show();
+  });
+
+  studentForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearModalAlert();
+
+    const id = studentIdInput.value;
+    const dto = {
+      id: id ? parseInt(id) : 0,
+      firstName: firstNameInput.value.trim(),
+      lastName: lastNameInput.value.trim(),
+      studentNumber: studentNumberInput.value.trim(),
+      class: studentClassInput.value.trim(),
+    };
+
+    if (!/^\d+$/.test(dto.studentNumber)) {
+      showModalError({ message: "Öğrenci numarası yalnızca rakamlardan oluşmalıdır." });
+      return;
+    }
+
+    try {
+      let response;
+      if (id) {
+        response = await fetch(`${apiUrl}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dto)
+        });
+      } else {
+        const postDto = { ...dto };
+        delete postDto.id;
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(postDto)
+        });
+      }
+
+      if (!response.ok) {
+        const error = await response.json();
+        showModalError(error);
+        return;
+      }
+
+      studentModal.hide();
+      showAlert(id ? 'Öğrenci başarıyla güncellendi.' : 'Öğrenci başarıyla eklendi.', 'success');
+      loadStudents();
+
+    } catch (error) {
+      showModalError({ message: 'İstek sırasında bir hata oluştu.' });
+    }
+  });
+
+  function showModalError(error) {
+    let msg = '';
+    if (error.errors) {
+      for (const key in error.errors) {
+        msg += `<div><strong>${key}</strong>: ${error.errors[key].join('<br>')}</div>`;
+      }
+    } else if (error.message) {
+      msg = error.message;
+    } else if (error.title) {
+      msg = error.title;
+    } else {
+      msg = JSON.stringify(error);
+    }
+    modalAlertPlaceholder.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+  }
+
+  function showAlert(message, type = 'danger') {
+    alertPlaceholder.innerHTML = `
+      <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Kapat"></button>
+      </div>
+    `;
+  }
+
+  function clearModal() {
+    studentForm.reset();
+    studentIdInput.value = '';
+    clearModalAlert();
+  }
+
+  function clearModalAlert() {
+    modalAlertPlaceholder.innerHTML = '';
+  }
+
+  async function loadStudents() {
+    studentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center">Yükleniyor...</td></tr>';
+    try {
+      const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error('Veriler alınamadı.');
+      const students = await response.json();
+      if (students.length === 0) {
+        studentsTableBody.innerHTML = `<tr><td colspan="6" class="text-center">Kayıt bulunamadı.</td></tr>`;
+        return;
+      }
+
+      studentsTableBody.innerHTML = '';
+      students.forEach(renderStudentRow);
+      bindTableButtons();
+    } catch (error) {
+      studentsTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Hata: ${error.message}</td></tr>`;
+    }
+  }
+
+  function renderStudentRow(student) {
+    studentsTableBody.innerHTML += `
+      <tr>
+        <td>${student.id}</td>
+        <td>${student.firstName}</td>
+        <td>${student.lastName}</td>
+        <td>${student.studentNumber}</td>
+        <td>${student.class}</td>
+        <td>
+          <button class="btn btn-sm btn-warning btn-edit" data-id="${student.id}">Düzenle</button>
+          <button class="btn btn-sm btn-danger btn-delete" data-id="${student.id}">Sil</button>
+        </td>
+      </tr>
+    `;
+  }
+
+  function bindTableButtons() {
+    document.querySelectorAll('.btn-edit').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        await loadStudentToModal(id);
+      });
+    });
+
+    document.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        if (confirm('Öğrenciyi silmek istediğinize emin misiniz?')) {
+          await deleteStudent(id);
+        }
+      });
+    });
+  }
+
+  async function loadStudentToModal(id) {
+    clearModal();
+    studentModalLabel.textContent = 'Öğrenci Düzenle';
+    saveStudentBtn.textContent = 'Güncelle';
+
+    try {
+      const response = await fetch(`${apiUrl}/${id}`);
+      if (!response.ok) {
+        showAlert('Öğrenci bulunamadı.', 'danger');
+        return;
+      }
+      const student = await response.json();
+      studentIdInput.value = student.id;
+      firstNameInput.value = student.firstName;
+      lastNameInput.value = student.lastName;
+      studentNumberInput.value = student.studentNumber;
+      studentClassInput.value = student.class;
+      studentModal.show();
+    } catch {
+      showAlert('Öğrenci yüklenirken hata oluştu.', 'danger');
+    }
+  }
+
+  async function deleteStudent(id) {
+    try {
+      const response = await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const error = await response.json();
+        showAlert(error.message || 'Silme işlemi başarısız oldu.', 'danger');
+        return;
+      }
+      showAlert('Öğrenci başarıyla silindi.', 'success');
+      loadStudents();
+    } catch {
+      showAlert('Silme işlemi sırasında hata oluştu.', 'danger');
+    }
+  }
+
+  loadStudents();
+</script>
+</body>
+</html>
